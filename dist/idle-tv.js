@@ -15275,7 +15275,7 @@ function initializeContext(params) {
     external: params?.external ?? void 0
   };
 }
-function process2(schema, ctx, _params = { path: [], schemaPath: [] }) {
+function process(schema, ctx, _params = { path: [], schemaPath: [] }) {
   var _a2;
   const def = schema._zod.def;
   const seen = ctx.seen.get(schema);
@@ -15312,7 +15312,7 @@ function process2(schema, ctx, _params = { path: [], schemaPath: [] }) {
     if (parent) {
       if (!result.ref)
         result.ref = parent;
-      process2(parent, ctx, params);
+      process(parent, ctx, params);
       ctx.seen.get(parent).isParent = true;
     }
   }
@@ -15593,14 +15593,14 @@ function isTransforming(_schema, _ctx) {
 }
 var createToJSONSchemaMethod = (schema, processors = {}) => (params) => {
   const ctx = initializeContext({ ...params, processors });
-  process2(schema, ctx);
+  process(schema, ctx);
   extractDefs(ctx, schema);
   return finalize(ctx, schema);
 };
 var createStandardJSONSchemaMethod = (schema, io, processors = {}) => (params) => {
   const { libraryOptions, target } = params ?? {};
   const ctx = initializeContext({ ...libraryOptions ?? {}, target, io, processors });
-  process2(schema, ctx);
+  process(schema, ctx);
   extractDefs(ctx, schema);
   return finalize(ctx, schema);
 };
@@ -15857,7 +15857,7 @@ var arrayProcessor = (schema, ctx, _json, params) => {
   if (typeof maximum === "number")
     json2.maxItems = maximum;
   json2.type = "array";
-  json2.items = process2(def.element, ctx, { ...params, path: [...params.path, "items"] });
+  json2.items = process(def.element, ctx, { ...params, path: [...params.path, "items"] });
 };
 var objectProcessor = (schema, ctx, _json, params) => {
   const json2 = _json;
@@ -15866,7 +15866,7 @@ var objectProcessor = (schema, ctx, _json, params) => {
   json2.properties = {};
   const shape = def.shape;
   for (const key in shape) {
-    json2.properties[key] = process2(shape[key], ctx, {
+    json2.properties[key] = process(shape[key], ctx, {
       ...params,
       path: [...params.path, "properties", key]
     });
@@ -15889,7 +15889,7 @@ var objectProcessor = (schema, ctx, _json, params) => {
     if (ctx.io === "output")
       json2.additionalProperties = false;
   } else if (def.catchall) {
-    json2.additionalProperties = process2(def.catchall, ctx, {
+    json2.additionalProperties = process(def.catchall, ctx, {
       ...params,
       path: [...params.path, "additionalProperties"]
     });
@@ -15898,7 +15898,7 @@ var objectProcessor = (schema, ctx, _json, params) => {
 var unionProcessor = (schema, ctx, json2, params) => {
   const def = schema._zod.def;
   const isExclusive = def.inclusive === false;
-  const options = def.options.map((x, i) => process2(x, ctx, {
+  const options = def.options.map((x, i) => process(x, ctx, {
     ...params,
     path: [...params.path, isExclusive ? "oneOf" : "anyOf", i]
   }));
@@ -15910,11 +15910,11 @@ var unionProcessor = (schema, ctx, json2, params) => {
 };
 var intersectionProcessor = (schema, ctx, json2, params) => {
   const def = schema._zod.def;
-  const a = process2(def.left, ctx, {
+  const a = process(def.left, ctx, {
     ...params,
     path: [...params.path, "allOf", 0]
   });
-  const b = process2(def.right, ctx, {
+  const b = process(def.right, ctx, {
     ...params,
     path: [...params.path, "allOf", 1]
   });
@@ -15931,11 +15931,11 @@ var tupleProcessor = (schema, ctx, _json, params) => {
   json2.type = "array";
   const prefixPath = ctx.target === "draft-2020-12" ? "prefixItems" : "items";
   const restPath = ctx.target === "draft-2020-12" ? "items" : ctx.target === "openapi-3.0" ? "items" : "additionalItems";
-  const prefixItems = def.items.map((x, i) => process2(x, ctx, {
+  const prefixItems = def.items.map((x, i) => process(x, ctx, {
     ...params,
     path: [...params.path, prefixPath, i]
   }));
-  const rest = def.rest ? process2(def.rest, ctx, {
+  const rest = def.rest ? process(def.rest, ctx, {
     ...params,
     path: [...params.path, restPath, ...ctx.target === "openapi-3.0" ? [def.items.length] : []]
   }) : null;
@@ -15975,7 +15975,7 @@ var recordProcessor = (schema, ctx, _json, params) => {
   const keyBag = keyType._zod.bag;
   const patterns = keyBag?.patterns;
   if (def.mode === "loose" && patterns && patterns.size > 0) {
-    const valueSchema = process2(def.valueType, ctx, {
+    const valueSchema = process(def.valueType, ctx, {
       ...params,
       path: [...params.path, "patternProperties", "*"]
     });
@@ -15985,12 +15985,12 @@ var recordProcessor = (schema, ctx, _json, params) => {
     }
   } else {
     if (ctx.target === "draft-07" || ctx.target === "draft-2020-12") {
-      json2.propertyNames = process2(def.keyType, ctx, {
+      json2.propertyNames = process(def.keyType, ctx, {
         ...params,
         path: [...params.path, "propertyNames"]
       });
     }
-    json2.additionalProperties = process2(def.valueType, ctx, {
+    json2.additionalProperties = process(def.valueType, ctx, {
       ...params,
       path: [...params.path, "additionalProperties"]
     });
@@ -16005,7 +16005,7 @@ var recordProcessor = (schema, ctx, _json, params) => {
 };
 var nullableProcessor = (schema, ctx, json2, params) => {
   const def = schema._zod.def;
-  const inner = process2(def.innerType, ctx, params);
+  const inner = process(def.innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   if (ctx.target === "openapi-3.0") {
     seen.ref = def.innerType;
@@ -16016,20 +16016,20 @@ var nullableProcessor = (schema, ctx, json2, params) => {
 };
 var nonoptionalProcessor = (schema, ctx, _json, params) => {
   const def = schema._zod.def;
-  process2(def.innerType, ctx, params);
+  process(def.innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   seen.ref = def.innerType;
 };
 var defaultProcessor = (schema, ctx, json2, params) => {
   const def = schema._zod.def;
-  process2(def.innerType, ctx, params);
+  process(def.innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   seen.ref = def.innerType;
   json2.default = JSON.parse(JSON.stringify(def.defaultValue));
 };
 var prefaultProcessor = (schema, ctx, json2, params) => {
   const def = schema._zod.def;
-  process2(def.innerType, ctx, params);
+  process(def.innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   seen.ref = def.innerType;
   if (ctx.io === "input")
@@ -16037,7 +16037,7 @@ var prefaultProcessor = (schema, ctx, json2, params) => {
 };
 var catchProcessor = (schema, ctx, json2, params) => {
   const def = schema._zod.def;
-  process2(def.innerType, ctx, params);
+  process(def.innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   seen.ref = def.innerType;
   let catchValue;
@@ -16051,32 +16051,32 @@ var catchProcessor = (schema, ctx, json2, params) => {
 var pipeProcessor = (schema, ctx, _json, params) => {
   const def = schema._zod.def;
   const innerType = ctx.io === "input" ? def.in._zod.def.type === "transform" ? def.out : def.in : def.out;
-  process2(innerType, ctx, params);
+  process(innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   seen.ref = innerType;
 };
 var readonlyProcessor = (schema, ctx, json2, params) => {
   const def = schema._zod.def;
-  process2(def.innerType, ctx, params);
+  process(def.innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   seen.ref = def.innerType;
   json2.readOnly = true;
 };
 var promiseProcessor = (schema, ctx, _json, params) => {
   const def = schema._zod.def;
-  process2(def.innerType, ctx, params);
+  process(def.innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   seen.ref = def.innerType;
 };
 var optionalProcessor = (schema, ctx, _json, params) => {
   const def = schema._zod.def;
-  process2(def.innerType, ctx, params);
+  process(def.innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   seen.ref = def.innerType;
 };
 var lazyProcessor = (schema, ctx, _json, params) => {
   const innerType = schema._zod.innerType;
-  process2(innerType, ctx, params);
+  process(innerType, ctx, params);
   const seen = ctx.seen.get(schema);
   seen.ref = innerType;
 };
@@ -20674,6 +20674,45 @@ var import_path = require("path");
 var CONFIG_DIR = (0, import_path.join)((0, import_os.homedir)(), ".idle-tv");
 var CONFIG_FILE = (0, import_path.join)(CONFIG_DIR, "config.json");
 var SOCKET_PATH = "/tmp/idle-tv-mpv.sock";
+function findKittySockets() {
+  try {
+    const files = (0, import_child_process.execSync)("ls /tmp/kitty-* 2>/dev/null || true", { encoding: "utf8" });
+    return files.trim().split("\n").filter((f) => f && !f.includes("*"));
+  } catch (e) {
+    return [];
+  }
+}
+function getFocusedKittyWindow() {
+  const sockets = findKittySockets();
+  for (const socket of sockets) {
+    try {
+      const output = (0, import_child_process.execSync)(`kitty @ --to="unix:${socket}" ls 2>/dev/null`, { encoding: "utf8" });
+      const data = JSON.parse(output);
+      for (const osWindow of data) {
+        if (!osWindow.is_focused) continue;
+        for (const tab of osWindow.tabs) {
+          if (!tab.is_focused) continue;
+          for (const win of tab.windows) {
+            if (win.is_focused) {
+              return {
+                socket: `unix:${socket}`,
+                windowId: win.id,
+                tabWindowCount: tab.windows.length
+              };
+            }
+          }
+        }
+      }
+    } catch (e) {
+      continue;
+    }
+  }
+  return null;
+}
+function kittyCmd(args, socket = null) {
+  const toFlag = socket ? `--to="${socket}"` : "";
+  return `kitty @ ${toFlag} ${args}`;
+}
 var DEFAULT_CONFIG = {
   lastUrl: null,
   volume: 50,
@@ -20714,31 +20753,9 @@ function isMpvRunning() {
     return false;
   }
 }
-function getKittyWindowCount() {
-  try {
-    const currentWindowId = process.env.KITTY_WINDOW_ID;
-    if (!currentWindowId) return 1;
-    const output = (0, import_child_process.execSync)("kitty @ ls 2>/dev/null", { encoding: "utf8" });
-    const data = JSON.parse(output);
-    for (const osWindow of data) {
-      for (const tab of osWindow.tabs) {
-        if (tab.windows) {
-          for (const win of tab.windows) {
-            if (String(win.id) === String(currentWindowId)) {
-              return tab.windows.length;
-            }
-          }
-        }
-      }
-    }
-    return 1;
-  } catch (e) {
-    return 1;
-  }
-}
-function getSplitLocation() {
-  const windowCount = getKittyWindowCount();
-  return windowCount === 1 ? "vsplit" : "hsplit";
+function getSplitLocation(focusedInfo) {
+  if (!focusedInfo) return "vsplit";
+  return focusedInfo.tabWindowCount === 1 ? "vsplit" : "hsplit";
 }
 function mpvCommand(command) {
   try {
@@ -20797,11 +20814,14 @@ function startMpv(url2) {
     return { success: false, message: "Failed to get stream URL. Check if yt-dlp supports this site." };
   }
   try {
-    (0, import_child_process.execSync)('kitty @ close-window --match="title:idle-tv" 2>/dev/null || true');
-    const splitLocation = getSplitLocation();
-    const windowId = process.env.KITTY_WINDOW_ID || "";
-    const nextTo = windowId ? `--next-to="id:${windowId}"` : "";
-    (0, import_child_process.execSync)(`kitty @ launch --location=${splitLocation} ${nextTo} --title="idle-tv" mpv --vo=kitty --keep-open=yes --input-ipc-server=${SOCKET_PATH} "${streamUrl}"`, {
+    const focusedInfo = getFocusedKittyWindow();
+    if (!focusedInfo) {
+      return { success: false, message: "Could not find focused Kitty window" };
+    }
+    (0, import_child_process.execSync)(kittyCmd('close-window --match="title:idle-tv"', focusedInfo.socket) + " 2>/dev/null || true");
+    const splitLocation = getSplitLocation(focusedInfo);
+    const nextTo = `--next-to="id:${focusedInfo.windowId}"`;
+    (0, import_child_process.execSync)(kittyCmd(`launch --location=${splitLocation} ${nextTo} --title="idle-tv" mpv --vo=kitty --keep-open=yes --input-ipc-server=${SOCKET_PATH} "${streamUrl}"`, focusedInfo.socket), {
       encoding: "utf8"
     });
     const config2 = loadConfig();

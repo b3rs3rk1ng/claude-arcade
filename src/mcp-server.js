@@ -14,6 +14,56 @@ const CONFIG_DIR = join(homedir(), ".idle-tv");
 const CONFIG_FILE = join(CONFIG_DIR, "config.json");
 const SOCKET_PATH = "/tmp/idle-tv-mpv.sock";
 
+// Find all Kitty sockets
+function findKittySockets() {
+  try {
+    const files = execSync('ls /tmp/kitty-* 2>/dev/null || true', { encoding: "utf8" });
+    return files.trim().split('\n').filter(f => f && !f.includes('*'));
+  } catch (e) {
+    return [];
+  }
+}
+
+// Get focused window info across all Kitty instances
+function getFocusedKittyWindow() {
+  const sockets = findKittySockets();
+
+  for (const socket of sockets) {
+    try {
+      const output = execSync(`kitty @ --to="unix:${socket}" ls 2>/dev/null`, { encoding: "utf8" });
+      const data = JSON.parse(output);
+
+      for (const osWindow of data) {
+        if (!osWindow.is_focused) continue;
+
+        for (const tab of osWindow.tabs) {
+          if (!tab.is_focused) continue;
+
+          for (const win of tab.windows) {
+            if (win.is_focused) {
+              return {
+                socket: `unix:${socket}`,
+                windowId: win.id,
+                tabWindowCount: tab.windows.length
+              };
+            }
+          }
+        }
+      }
+    } catch (e) {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+// Build kitty @ command with specific socket
+function kittyCmd(args, socket = null) {
+  const toFlag = socket ? `--to="${socket}"` : "";
+  return `kitty @ ${toFlag} ${args}`;
+}
+
 // Default config
 const DEFAULT_CONFIG = {
   lastUrl: null,
@@ -65,39 +115,12 @@ function isMpvRunning() {
   }
 }
 
-// Get number of windows in current Kitty tab
-function getKittyWindowCount() {
-  try {
-    const currentWindowId = process.env.KITTY_WINDOW_ID;
-    if (!currentWindowId) return 1;
-
-    const output = execSync('kitty @ ls 2>/dev/null', { encoding: "utf8" });
-    const data = JSON.parse(output);
-
-    // Find the tab containing our window
-    for (const osWindow of data) {
-      for (const tab of osWindow.tabs) {
-        if (tab.windows) {
-          for (const win of tab.windows) {
-            if (String(win.id) === String(currentWindowId)) {
-              return tab.windows.length;
-            }
-          }
-        }
-      }
-    }
-    return 1;
-  } catch (e) {
-    return 1;
-  }
-}
-
-// Get split location based on current layout
-function getSplitLocation() {
-  const windowCount = getKittyWindowCount();
+// Get split location based on focused window's tab layout
+function getSplitLocation(focusedInfo) {
+  if (!focusedInfo) return "vsplit";
   // If only 1 window (Claude alone), split right (vsplit)
   // If 2+ windows (already split), split below (hsplit)
-  return windowCount === 1 ? "vsplit" : "hsplit";
+  return focusedInfo.tabWindowCount === 1 ? "vsplit" : "hsplit";
 }
 
 // Send command to mpv via socket
@@ -174,14 +197,19 @@ function startMpv(url) {
 
   // Start new mpv instance in Kitty split
   try {
+    // Find the currently focused Kitty window
+    const focusedInfo = getFocusedKittyWindow();
+    if (!focusedInfo) {
+      return { success: false, message: "Could not find focused Kitty window" };
+    }
+
     // Close existing idle-tv window if any
-    execSync('kitty @ close-window --match="title:idle-tv" 2>/dev/null || true');
+    execSync(kittyCmd('close-window --match="title:idle-tv"', focusedInfo.socket) + ' 2>/dev/null || true');
 
     // Launch in Kitty split with video in terminal
-    const splitLocation = getSplitLocation();
-    const windowId = process.env.KITTY_WINDOW_ID || "";
-    const nextTo = windowId ? `--next-to="id:${windowId}"` : "";
-    execSync(`kitty @ launch --location=${splitLocation} ${nextTo} --title="idle-tv" mpv --vo=kitty --keep-open=yes --input-ipc-server=${SOCKET_PATH} "${streamUrl}"`, {
+    const splitLocation = getSplitLocation(focusedInfo);
+    const nextTo = `--next-to="id:${focusedInfo.windowId}"`;
+    execSync(kittyCmd(`launch --location=${splitLocation} ${nextTo} --title="idle-tv" mpv --vo=kitty --keep-open=yes --input-ipc-server=${SOCKET_PATH} "${streamUrl}"`, focusedInfo.socket), {
       encoding: "utf8",
     });
 
